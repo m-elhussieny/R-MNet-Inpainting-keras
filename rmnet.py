@@ -113,7 +113,12 @@ class RMNETWGAN():
             self.combined = Model([image,mask], [gen_img,valid])
             self.combined.compile(loss=[self.generator_loss, self.wasserstein_loss],loss_weights=[1,0.001], optimizer=self.g_optimizer)
 
-        
+    # =================================================================================== #
+                  Feature model
+    # =================================================================================== #
+    vgg = VGG19(include_top=False, weights='imagenet', input_shape=self.img_shape)
+    self.loss_model = Model(inputs=vgg.input, outputs=vgg.get_layer('block3_conv3').output)
+    self.loss_model.trainable = False
     # =================================================================================== #
     #               4. Define the discriminator and generator losses                      #
     # =================================================================================== # 
@@ -123,17 +128,14 @@ class RMNETWGAN():
       
     def generator_loss(self, y_true,y_pred):
 
-        mask = K.expand_dims(Lambda(lambda x : x[:,:,:,3])(y_pred),axis=-1) 
+        mask = Lambda(lambda x : x[:,:,:,3:])(y_pred)                # the masked pixel in the input mask have value of one and others have zeros 
         input_img = Lambda(lambda x : x[:,:,:,0:3])(y_true)
         output_img = Lambda(lambda x : x[:,:,:,0:3])(y_pred)
-        reversed_mask = Lambda(self.ReverseMask,output_shape=(self.img_shape_mask))(mask)
-        vgg = VGG19(include_top=False, weights='imagenet', input_shape=self.img_shape)
-        loss_model = Model(inputs=vgg.input, outputs=vgg.get_layer('block3_conv3').output)
-        loss_model.trainable = False
-        p_loss = K.mean(K.square(loss_model(output_img) - loss_model(input_img)))
-        masking = Multiply()([reversed_mask,input_img])
-        predicting = Multiply()([reversed_img, output_img])
-        reversed_mask_loss = (K.mean(K.square(loss_model(predicting) - loss_model(masking))))
+        reversed_mask = Lambda(self.reverse_mask,output_shape=(self.img_shape_mask))(mask)
+        p_loss = K.mean(K.square(self.loss_model(output_img) - self.loss_model(input_img)))
+        masking = Multiply()([mask,input_img])  # here we extract only the masked area of the image
+        predicting = Multiply()([mask, output_img]) # here we extract only the masked area of the image
+        reversed_mask_loss = (K.mean(K.square(self.loss_model(predicting) - self.loss_model(masking))))
         new_loss = 0.6*(p_loss+com_loss) + 0.4*reversed_mask_loss
         return new_loss       
 
