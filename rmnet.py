@@ -114,7 +114,7 @@ class RMNETWGAN():
             self.combined.compile(loss=[self.generator_loss, self.wasserstein_loss],loss_weights=[1,0.001], optimizer=self.g_optimizer)
 
     # =================================================================================== #
-                  Feature model
+    #                          Feature model                                              #
     # =================================================================================== #
     vgg = VGG19(include_top=False, weights='imagenet', input_shape=self.img_shape)
     self.loss_model = Model(inputs=vgg.input, outputs=vgg.get_layer('block3_conv3').output)
@@ -133,10 +133,10 @@ class RMNETWGAN():
         output_img = Lambda(lambda x : x[:,:,:,0:3])(y_pred)
         reversed_mask = Lambda(self.reverse_mask,output_shape=(self.img_shape_mask))(mask)
         p_loss = K.mean(K.square(self.loss_model(output_img) - self.loss_model(input_img)))
-        masking = Multiply()([mask,input_img])  # here we extract only the masked area of the image
-        predicting = Multiply()([mask, output_img]) # here we extract only the masked area of the image
+        masking = Multiply()([mask,input_img])                       # here we extract only the masked area of the image
+        predicting = Multiply()([mask, output_img])                  # here we extract only the masked area of the image
         reversed_mask_loss = (K.mean(K.square(self.loss_model(predicting) - self.loss_model(masking))))
-        new_loss = 0.6*(p_loss+com_loss) + 0.4*reversed_mask_loss
+        new_loss = 0.6*p_loss + 0.4*reversed_mask_loss
         return new_loss       
 
     # =================================================================================== #
